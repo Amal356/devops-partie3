@@ -1,0 +1,63 @@
+# TP8 – Défi 1 : tests unitaires puis tests d'intégration contre un vrai PostgreSQL
+name: TP8 - tests API contact
+
+on:
+  push:
+    paths:
+      - "tp8-api-express-tests/**"
+      - ".github/workflows/tp8-ci.yml"
+  pull_request:
+    paths:
+      - "tp8-api-express-tests/**"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tp8-api-express-tests
+
+    # Service container : PostgreSQL éphémère, détruit à la fin du job
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: contact
+          POSTGRES_PASSWORD: contact-ci # base jetable de CI, jamais exposée
+          POSTGRES_DB: contact
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U contact -d contact"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: contact
+      PGPASSWORD: contact-ci
+      PGDATABASE: contact
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tp8-api-express-tests/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Tests de routes (Vitest + Supertest)
+        run: npm test
+
+      - name: Appliquer les migrations
+        run: npm run migrate
+
+      - name: Tests d'intégration (PostgreSQL)
+        run: npm run test:integration
